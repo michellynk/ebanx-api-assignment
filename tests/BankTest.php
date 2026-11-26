@@ -1,0 +1,109 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests;
+
+use App\AccountNotFound;
+use App\Bank;
+use App\FileStore;
+use App\InvalidAmount;
+use PHPUnit\Framework\TestCase;
+
+/**
+ * Testa as regras com o store real. Cada teste confere o efeito no estado
+ * (o saldo lido depois), não só o valor de retorno.
+ */
+final class BankTest extends TestCase
+{
+    private string $path;
+    private FileStore $store;
+    private Bank $bank;
+
+    protected function setUp(): void
+    {
+        $this->path = sys_get_temp_dir() . '/ebanx-bank-' . uniqid() . '.json';
+        $this->store = new FileStore($this->path);
+        $this->bank = new Bank($this->store);
+    }
+
+    protected function tearDown(): void
+    {
+        if (is_file($this->path)) {
+            unlink($this->path);
+        }
+    }
+
+    public function testBalanceOfNonExistingAccountThrows(): void
+    {
+        $this->expectException(AccountNotFound::class);
+
+        $this->bank->balance('1234');
+    }
+
+    public function testDepositCreatesAccountWithInitialBalance(): void
+    {
+        $this->assertSame(10, $this->bank->deposit('100', 10));
+        $this->assertSame(10, $this->bank->balance('100'));
+    }
+
+    public function testDepositIntoExistingAccountIncreasesBalance(): void
+    {
+        $this->bank->deposit('100', 10);
+
+        $this->assertSame(20, $this->bank->deposit('100', 10));
+        $this->assertSame(20, $this->bank->balance('100'));
+    }
+
+    public function testDepositDoesNotTouchOtherAccounts(): void
+    {
+        $this->bank->deposit('100', 10);
+        $this->bank->deposit('300', 5);
+
+        $this->assertSame(10, $this->bank->balance('100'));
+        $this->assertSame(5, $this->bank->balance('300'));
+    }
+
+    public function testDepositPersistsAcrossInstances(): void
+    {
+        $this->bank->deposit('100', 10);
+
+        // Nova instância = nova requisição.
+        $this->assertSame(10, (new Bank(new FileStore($this->path)))->balance('100'));
+    }
+
+    public function testBalanceIsReadOnly(): void
+    {
+        $this->bank->deposit('100', 10);
+
+        $this->bank->balance('100');
+        $this->bank->balance('100');
+
+        $this->assertSame(['100' => 10], $this->store->read());
+    }
+
+    public function testFailedBalanceDoesNotCreateAccount(): void
+    {
+        try {
+            $this->bank->balance('1234');
+        } catch (AccountNotFound) {
+        }
+
+        $this->assertSame([], $this->store->read());
+    }
+
+    public function testDepositRejectsZeroAndNegativeAmountsWithoutChangingState(): void
+    {
+        $this->bank->deposit('100', 10);
+
+        foreach ([0, -5] as $amount) {
+            try {
+                $this->bank->deposit('100', $amount);
+                $this->fail("Depósito de {$amount} deveria falhar.");
+            } catch (InvalidAmount) {
+            }
+        }
+
+        $this->assertSame(10, $this->bank->balance('100'));
+    }
+}
