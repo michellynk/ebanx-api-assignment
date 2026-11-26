@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Tests;
+namespace Tests\Unit;
 
-use App\AccountNotFound;
 use App\Bank;
-use App\FileStore;
-use App\InvalidAmount;
+use App\Exceptions\AccountNotFound;
+use App\Exceptions\InvalidAmount;
+use App\Storage\FileStore;
 use PHPUnit\Framework\TestCase;
 
 /**

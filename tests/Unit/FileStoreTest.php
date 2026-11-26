@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Tests;
+namespace Tests\Unit;
 
-use App\FileStore;
+use App\Storage\FileStore;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App;
 
+use App\Exceptions\AccountNotFound;
+use App\Exceptions\InvalidAmount;
+use App\Storage\FileStore;
+
 /**
  * Regras de negócio das contas. Não sabe nada de HTTP: recebe valores já
  * tipados, devolve saldos e sinaliza erros com exceções de domínio.
