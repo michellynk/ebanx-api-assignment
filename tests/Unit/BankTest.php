@@ -6,6 +6,7 @@ namespace Tests\Unit;
 
 use App\Bank;
 use App\Exceptions\AccountNotFound;
+use App\Exceptions\InsufficientFunds;
 use App\Exceptions\InvalidAmount;
 use App\Storage\FileStore;
 use PHPUnit\Framework\TestCase;
@@ -100,6 +101,61 @@ final class BankTest extends TestCase
             try {
                 $this->bank->deposit('100', $amount);
                 $this->fail("Depósito de {$amount} deveria falhar.");
+            } catch (InvalidAmount) {
+            }
+        }
+
+        $this->assertSame(10, $this->bank->balance('100'));
+    }
+
+    public function testWithdrawReducesBalance(): void
+    {
+        $this->bank->deposit('100', 20);
+
+        $this->assertSame(15, $this->bank->withdraw('100', 5));
+        $this->assertSame(15, $this->bank->balance('100'));
+    }
+
+    public function testWithdrawCanLeaveBalanceAtZero(): void
+    {
+        $this->bank->deposit('100', 15);
+
+        $this->assertSame(0, $this->bank->withdraw('100', 15));
+        $this->assertSame(0, $this->bank->balance('100'));
+    }
+
+    public function testWithdrawFromNonExistingAccountThrowsAndDoesNotCreateIt(): void
+    {
+        try {
+            $this->bank->withdraw('200', 10);
+            $this->fail('Saque de conta inexistente deveria falhar.');
+        } catch (AccountNotFound) {
+        }
+
+        $this->assertSame([], $this->store->read());
+    }
+
+    public function testWithdrawWithInsufficientFundsKeepsBalance(): void
+    {
+        $this->bank->deposit('100', 10);
+
+        try {
+            $this->bank->withdraw('100', 11);
+            $this->fail('Saque acima do saldo deveria falhar.');
+        } catch (InsufficientFunds) {
+        }
+
+        $this->assertSame(10, $this->bank->balance('100'));
+    }
+
+    public function testWithdrawRejectsZeroAndNegativeAmountsWithoutChangingState(): void
+    {
+        $this->bank->deposit('100', 10);
+
+        foreach ([0, -5] as $amount) {
+            try {
+                $this->bank->withdraw('100', $amount);
+                $this->fail("Saque de {$amount} deveria falhar.");
             } catch (InvalidAmount) {
             }
         }

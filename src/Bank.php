@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App;
 
 use App\Exceptions\AccountNotFound;
+use App\Exceptions\InsufficientFunds;
 use App\Exceptions\InvalidAmount;
 use App\Storage\FileStore;
 
@@ -22,10 +23,7 @@ final class Bank
     public function balance(string $accountId): int
     {
         $accounts = $this->store->read();
-
-        if (!array_key_exists($accountId, $accounts)) {
-            throw new AccountNotFound($accountId);
-        }
+        $this->assertExists($accounts, $accountId);
 
         return $accounts[$accountId];
     }
@@ -42,10 +40,36 @@ final class Bank
         });
     }
 
+    /** A conta precisa existir e ter saldo suficiente. Devolve o novo saldo. */
+    public function withdraw(string $origin, int $amount): int
+    {
+        $this->assertPositive($amount);
+
+        return $this->store->transaction(function (array &$accounts) use ($origin, $amount): int {
+            $this->assertExists($accounts, $origin);
+
+            if ($accounts[$origin] < $amount) {
+                throw new InsufficientFunds($origin, $accounts[$origin], $amount);
+            }
+
+            $accounts[$origin] -= $amount;
+
+            return $accounts[$origin];
+        });
+    }
+
     private function assertPositive(int $amount): void
     {
         if ($amount <= 0) {
             throw new InvalidAmount($amount);
+        }
+    }
+
+    /** @param array<string, int> $accounts */
+    private function assertExists(array $accounts, string $accountId): void
+    {
+        if (!array_key_exists($accountId, $accounts)) {
+            throw new AccountNotFound($accountId);
         }
     }
 }
