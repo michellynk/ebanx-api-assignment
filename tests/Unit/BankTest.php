@@ -8,6 +8,7 @@ use App\Bank;
 use App\Exceptions\AccountNotFound;
 use App\Exceptions\InsufficientFunds;
 use App\Exceptions\InvalidAmount;
+use App\Exceptions\SameAccountTransfer;
 use App\Storage\FileStore;
 use PHPUnit\Framework\TestCase;
 
@@ -161,5 +162,93 @@ final class BankTest extends TestCase
         }
 
         $this->assertSame(10, $this->bank->balance('100'));
+    }
+
+    public function testTransferMovesMoneyAndCreatesDestination(): void
+    {
+        $this->bank->deposit('100', 15);
+
+        $result = $this->bank->transfer('100', '300', 15);
+
+        $this->assertSame(['origin' => 0, 'destination' => 15], $result);
+        $this->assertSame(0, $this->bank->balance('100'));
+        $this->assertSame(15, $this->bank->balance('300'));
+    }
+
+    public function testTransferIntoExistingDestinationAddsToItsBalance(): void
+    {
+        $this->bank->deposit('100', 20);
+        $this->bank->deposit('300', 5);
+
+        $this->bank->transfer('100', '300', 8);
+
+        $this->assertSame(12, $this->bank->balance('100'));
+        $this->assertSame(13, $this->bank->balance('300'));
+    }
+
+    public function testTransferFromNonExistingAccountChangesNothing(): void
+    {
+        try {
+            $this->bank->transfer('200', '300', 15);
+            $this->fail('Transferência de conta inexistente deveria falhar.');
+        } catch (AccountNotFound) {
+        }
+
+        // O destino também não pode ter sido criado.
+        $this->assertSame([], $this->store->read());
+    }
+
+    public function testTransferWithInsufficientFundsChangesNeitherAccount(): void
+    {
+        $this->bank->deposit('100', 10);
+        $this->bank->deposit('300', 5);
+
+        try {
+            $this->bank->transfer('100', '300', 11);
+            $this->fail('Transferência acima do saldo deveria falhar.');
+        } catch (InsufficientFunds) {
+        }
+
+        $this->assertSame(['100' => 10, '300' => 5], $this->store->read());
+    }
+
+    public function testTransferToSameAccountIsRejected(): void
+    {
+        $this->bank->deposit('100', 10);
+
+        try {
+            $this->bank->transfer('100', '100', 5);
+            $this->fail('Transferência para a mesma conta deveria falhar.');
+        } catch (SameAccountTransfer) {
+        }
+
+        $this->assertSame(10, $this->bank->balance('100'));
+    }
+
+    public function testTransferRejectsZeroAndNegativeAmountsWithoutChangingState(): void
+    {
+        $this->bank->deposit('100', 10);
+
+        foreach ([0, -5] as $amount) {
+            try {
+                $this->bank->transfer('100', '300', $amount);
+                $this->fail("Transferência de {$amount} deveria falhar.");
+            } catch (InvalidAmount) {
+            }
+        }
+
+        $this->assertSame(['100' => 10], $this->store->read());
+    }
+
+    public function testTotalMoneyIsConservedByTransfers(): void
+    {
+        $this->bank->deposit('100', 50);
+        $this->bank->deposit('200', 30);
+
+        $this->bank->transfer('100', '200', 20);
+        $this->bank->transfer('200', '300', 35);
+        $this->bank->transfer('300', '100', 10);
+
+        $this->assertSame(80, array_sum($this->store->read()));
     }
 }

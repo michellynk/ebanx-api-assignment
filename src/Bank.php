@@ -7,6 +7,7 @@ namespace App;
 use App\Exceptions\AccountNotFound;
 use App\Exceptions\InsufficientFunds;
 use App\Exceptions\InvalidAmount;
+use App\Exceptions\SameAccountTransfer;
 use App\Storage\FileStore;
 
 /**
@@ -34,7 +35,7 @@ final class Bank
         $this->assertPositive($amount);
 
         return $this->store->transaction(function (array &$accounts) use ($destination, $amount): int {
-            $accounts[$destination] = ($accounts[$destination] ?? 0) + $amount;
+            $this->credit($accounts, $destination, $amount);
 
             return $accounts[$destination];
         });
@@ -46,16 +47,50 @@ final class Bank
         $this->assertPositive($amount);
 
         return $this->store->transaction(function (array &$accounts) use ($origin, $amount): int {
-            $this->assertExists($accounts, $origin);
-
-            if ($accounts[$origin] < $amount) {
-                throw new InsufficientFunds($origin, $accounts[$origin], $amount);
-            }
-
-            $accounts[$origin] -= $amount;
+            $this->debit($accounts, $origin, $amount);
 
             return $accounts[$origin];
         });
+    }
+
+    /**
+     * Débito e crédito acontecem na mesma transação: ou os dois são gravados,
+     * ou nenhum. O destino é criado se não existir.
+     *
+     * @return array{origin: int, destination: int}
+     */
+    public function transfer(string $origin, string $destination, int $amount): array
+    {
+        $this->assertPositive($amount);
+
+        if ($origin === $destination) {
+            throw new SameAccountTransfer($origin);
+        }
+
+        return $this->store->transaction(function (array &$accounts) use ($origin, $destination, $amount): array {
+            $this->debit($accounts, $origin, $amount);
+            $this->credit($accounts, $destination, $amount);
+
+            return ['origin' => $accounts[$origin], 'destination' => $accounts[$destination]];
+        });
+    }
+
+    /** @param array<string, int> $accounts */
+    private function credit(array &$accounts, string $accountId, int $amount): void
+    {
+        $accounts[$accountId] = ($accounts[$accountId] ?? 0) + $amount;
+    }
+
+    /** @param array<string, int> $accounts */
+    private function debit(array &$accounts, string $accountId, int $amount): void
+    {
+        $this->assertExists($accounts, $accountId);
+
+        if ($accounts[$accountId] < $amount) {
+            throw new InsufficientFunds($accountId, $accounts[$accountId], $amount);
+        }
+
+        $accounts[$accountId] -= $amount;
     }
 
     private function assertPositive(int $amount): void
