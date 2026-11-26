@@ -75,6 +75,14 @@ final class Bank
         });
     }
 
+    /** Apaga todas as contas. */
+    public function reset(): void
+    {
+        $this->store->transaction(function (array &$accounts): void {
+            $accounts = [];
+        });
+    }
+
     /** @param array<string, int> $accounts */
     private function credit(array &$accounts, string $accountId, int $amount): void
     {

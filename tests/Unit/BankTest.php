@@ -240,6 +240,18 @@ final class BankTest extends TestCase
         $this->assertSame(['100' => 10], $this->store->read());
     }
 
+    public function testResetRemovesAllAccounts(): void
+    {
+        $this->bank->deposit('100', 10);
+        $this->bank->deposit('300', 5);
+
+        $this->bank->reset();
+
+        $this->assertSame([], $this->store->read());
+        $this->expectException(AccountNotFound::class);
+        $this->bank->balance('100');
+    }
+
     public function testTotalMoneyIsConservedByTransfers(): void
     {
         $this->bank->deposit('100', 50);
