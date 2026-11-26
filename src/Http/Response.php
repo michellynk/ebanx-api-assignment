@@ -14,6 +14,7 @@ final class Response
     ) {
     }
 
+    public static function text(int $status, string $body): self
     {
         return new self($status, $body, 'text/plain; charset=utf-8');
     }
